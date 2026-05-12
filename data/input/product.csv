@@ -1,0 +1,9 @@
+product_id,product_name,capacity_cfm,pressure_bar,motor_power_kw,iso_certified,warranty_years,price_usd,product_type,noise_level_db
+AC-100-XP,Industrial Screw Compressor 100,105,7.5,22,Yes,2,12500,Compressor,72
+AC-200-XP,Industrial Screw Compressor 200,210,10.0,45,Yes,2,22000,Compressor,75
+AC-080-ECO,Compact Screw Compressor 80,80,7.0,15,Yes,1,9500,Compressor,68
+AC-110-STD,Standard Screw Compressor 110,110,8.0,30,No,2,11000,Compressor,74
+DRY-120-REF,Refrigerated Air Dryer 120,120,13.0,1.5,Yes,1.5,3800,Dryer,60
+DRY-050-REF,Refrigerated Air Dryer 50,55,13.0,0.8,Yes,1,2800,Dryer,58
+FIL-OIL-01,High-Efficiency Oil Filter,150,15.0,0,Yes,1,450,Filter,0
+FIL-PRE-02,Pre-Filter Assembly,150,15.0,0,Yes,1,350,Filter,0
