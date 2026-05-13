@@ -19,3 +19,6 @@ uvicorn
 langchain
 langchain-community
 google-generativeai
+pandas
+faiss-cpu 
+qdrant-client

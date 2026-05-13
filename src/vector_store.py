@@ -1,9 +1,11 @@
 import json
 import pandas as pd
-import faiss
 import numpy as np
 from pathlib import Path
 from sentence_transformers import SentenceTransformer
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from qdrant_client.models import PointStruct, VectorParams, Distance
 
 # -----------------------------
 # Paths
@@ -11,19 +13,26 @@ from sentence_transformers import SentenceTransformer
 BASE = Path(__file__).resolve().parent.parent
 JSON_PATH = BASE / "data" / "extracted" / "metadata.json"
 CSV_PATH = BASE / "data" / "input" / "products.csv"
-INDEX_PATH = BASE / "data" / "extracted" / "vector_index.faiss"
-METADATA_STORE_PATH = BASE / "data" / "extracted" / "vector_metadata.json"
+QDRANT_PATH = BASE / "data" / "qdrant_storage"  # Local DB folder
 
 # -----------------------------
-# 1. Load BGE-Small (Top-tier Retrieval Model)
+# 1. Initialize Qdrant & Model
 # -----------------------------
-print("Loading BGE-Small-EN-v1.5...")
-# BGE models work best with a specific instruction prefix for retrieval
+print("Connecting to Local Qdrant...")
+client = QdrantClient(path=str(QDRANT_PATH))
 model = SentenceTransformer('BAAI/bge-small-en-v1.5')
 
+COLLECTION_NAME = "compliance_audit"
+
 def build_vector_db():
-    all_chunks = []
-    all_metadata = []
+    # Fresh start: Delete and recreate collection
+    client.recreate_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+    )
+
+    points = []
+    idx = 0
 
     # --- A. Process RFQ JSON Chunks ---
     if JSON_PATH.exists():
@@ -31,64 +40,66 @@ def build_vector_db():
             rfq_data = json.load(f)
             items = rfq_data if isinstance(rfq_data, list) else rfq_data.get("text", [])
             
+            print(f"Processing {len(items)} RFQ chunks...")
             for item in items:
                 content = item.get("content") or item.get("text")
-                # We prepend the domain tag to the content to "bake" the physics into the vector
                 tags = item.get("domain_tags", ["General"])
-                tag_str = f"[{', '.join(tags)}]"
                 
-                # Metadata Injection: The vector now 'remembers' its domain
-                enriched_content = f"{tag_str} {content}"
-                
-                all_chunks.append(enriched_content)
-                all_metadata.append({
-                    "source": "RFQ",
-                    "page": item.get("page_num"),
-                    "domain": tags[0] if tags else "General",
-                    "type": item.get("type")
-                })
+                # Metadata Injection (Baking)
+                enriched_content = f"[{', '.join(tags)}] {content}"
+                vector = model.encode(enriched_content).tolist()
+
+                # Build the 'Point' (Vector + Payload)
+                points.append(PointStruct(
+                    id=idx,
+                    vector=vector,
+                    payload={
+                        "content": enriched_content,
+                        "source": "RFQ",
+                        "page": item.get("page_num"),
+                        "domain": tags[0] if tags else "General",
+                        "type": item.get("type")
+                    }
+                ))
+                idx += 1
 
     # --- B. Process Product CSV Rows ---
     if CSV_PATH.exists():
         df = pd.read_csv(CSV_PATH)
+        print(f"Processing {len(df)} Product rows...")
         for _, row in df.iterrows():
-            # Formatting product data into a highly searchable 'fact sheet'
             product_desc = (
                 f"[CATALOG] Product ID: {row['product_id']} | Name: {row['product_name']} | "
                 f"Type: {row['product_type']} | Capacity: {row['capacity_cfm']} CFM | "
                 f"ISO: {row['iso_certified']} | Noise: {row['noise_level_db']} dB"
             )
-            all_chunks.append(product_desc)
-            all_metadata.append({
-                "source": "CATALOG",
-                "product_id": row['product_id'],
-                "domain": "Product_Spec",
-                "type": "product_spec"
-            })
+            vector = model.encode(product_desc).tolist()
+
+            points.append(PointStruct(
+                id=idx,
+                vector=vector,
+                payload={
+                    "content": product_desc,
+                    "source": "CATALOG",
+                    "product_id": row['product_id'],
+                    "domain": "Product_Spec",
+                    "type": "product_spec",
+                    "cfm": row['capacity_cfm'],
+                    "iso": row['iso_certified']
+                }
+            ))
+            idx += 1
 
     # -----------------------------
-    # 2. Generate Embeddings
+    # 2. Upsert to Qdrant
     # -----------------------------
-    print(f"Embedding {len(all_chunks)} items with instruction-based retrieval...")
-    # For BGE, it's a best practice to add a query instruction during search, 
-    # but for indexing, we just encode normally.
-    embeddings = model.encode(all_chunks, show_progress_bar=True, normalize_embeddings=True)
-    embeddings = np.array(embeddings).astype('float32')
+    client.upsert(
+        collection_name=COLLECTION_NAME,
+        points=points
+    )
 
-    # -----------------------------
-    # 3. Create FAISS Index
-    # -----------------------------
-    dimension = embeddings.shape[1]
-    # Using IndexFlatIP (Inner Product) because we normalized embeddings
-    index = faiss.IndexFlatIP(dimension)
-    index.add(embeddings)
-
-    # Save
-    faiss.write_index(index, str(INDEX_PATH))
-    with open(METADATA_STORE_PATH, "w", encoding="utf-8") as f:
-        json.dump({"chunks": all_chunks, "metadata": all_metadata}, f, indent=4)
-
-    print(f"✅ Hybrid Vector Store ready: {index.ntotal} entries.")
+    print(f"✅ Qdrant Vector Store ready with {idx} points.")
+    print(f"📁 Database stored at: {QDRANT_PATH}")
 
 if __name__ == "__main__":
     build_vector_db()
