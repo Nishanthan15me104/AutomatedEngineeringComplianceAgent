@@ -1,15 +1,20 @@
 import os
 from typing import TypedDict, List
 from pathlib import Path
-from dotenv import load_dotenv  # Added for .env support
+from dotenv import load_dotenv
+
 from qdrant_client import QdrantClient
+from qdrant_client.models import Filter, FieldCondition, MatchValue # Added for hard filtering
+from sentence_transformers import SentenceTransformer # Added for text-to-vector
 from langchain_groq import ChatGroq
 from langgraph.graph import StateGraph, END
+
+# Suppress HuggingFace warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # -----------------------------
 # 1. Configuration & Environment
 # -----------------------------
-# Load environment variables from .env file
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,13 +28,10 @@ class AgentState(TypedDict):
     product_specs: List[str]
     compliance_report: str
 
-# Initialize Groq LLM
-# The client automatically looks for the 'GROQ_API_KEY' environment variable
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile", 
-    temperature=0,
-    max_retries=2
-)
+# Initialize Models
+print("Loading Embedding Model & LLM...")
+embed_model = SentenceTransformer('BAAI/bge-small-en-v1.5') # The missing piece!
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0, max_retries=2)
 
 # Connect to Qdrant
 client = QdrantClient(path=str(QDRANT_PATH))
@@ -43,26 +45,40 @@ def retrieve_rfq_requirements(state: AgentState):
     print("--- STEP: Extracting RFQ Requirements ---")
     search_query = f"Technical requirements and limits for {state['query']}"
     
+    # Encode text to vector
+    query_vector = embed_model.encode(search_query).tolist()
+    
+    # Search with a Hard Filter: ONLY look at RFQ sources
     results = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_text=search_query,
+        query=query_vector,
+        query_filter=Filter(
+            must=[FieldCondition(key="source", match=MatchValue(value="RFQ"))]
+        ),
         limit=5
     ).points
     
-    constraints = [res.payload['content'] for res in results if res.payload['source'] == 'RFQ']
+    constraints = [res.payload['content'] for res in results]
     return {"rfq_constraints": constraints}
 
 def retrieve_product_catalog(state: AgentState):
     """Fetches specs for the target product ID."""
     print(f"--- STEP: Fetching Specs for {state['product_id']} ---")
     
+    # Encode text to vector
+    query_vector = embed_model.encode(state['product_id']).tolist()
+    
+    # Search with a Hard Filter: ONLY look at CATALOG sources
     results = client.query_points(
         collection_name=COLLECTION_NAME,
-        query_text=state['product_id'],
+        query=query_vector,
+        query_filter=Filter(
+            must=[FieldCondition(key="source", match=MatchValue(value="CATALOG"))]
+        ),
         limit=2
     ).points
     
-    specs = [res.payload['content'] for res in results if res.payload['source'] == 'CATALOG']
+    specs = [res.payload['content'] for res in results]
     return {"product_specs": specs}
 
 def check_compliance(state: AgentState):
