@@ -22,3 +22,5 @@ google-generativeai
 pandas
 faiss-cpu 
 qdrant-client
+langchain-groq
+python-dotenv
