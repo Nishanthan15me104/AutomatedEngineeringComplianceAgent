@@ -618,19 +618,35 @@ python src/compliance_agent.py
 # 📊 Example Compliance Output
 
 ```text
+
+🚀 Starting Agentic Audit...
+--- STEP: Extracting RFQ Requirements ---
+--- STEP: Fetching Specs for AC-100-XP ---
+✅ Found Specs: [CATALOG] Product ID: AC-100-XP | Name: Industrial Screw Com...
+--- STEP: Comparing Constraints (1D Logic) ---
+
 ========================================
 FINAL COMPLIANCE REPORT
 ========================================
+To compare the RFQ requirements against the product specs, let's break down the key points:
 
-VERDICT: FAIL
+1. **Capacity**: The RFQ requires a capacity of not less than 100 CFM, while the product specification is 105 CFM, which meets the requirement.
+2. **Noise Level**: The RFQ specifies a noise level of 65-75 dB, and the product specification is 72 dB, which falls within the acceptable range.
+3. **Certification**: The RFQ requires the manufacturer to be ISO 9001 certified, but the product specification only mentions "ISO: Yes" without specifying the standard. However, it can be assumed that the product is ISO 9001 certified, as it is a common standard for industrial equipment.
+4. **Pressure**: The RFQ requires a pressure of 7.5 kg/cm2, but the product specification does not mention pressure. This is a significant mismatch, as the pressure requirement is not met.
+5. **Other Requirements**: The RFQ has several other requirements, such as a specific type of cooling, drive, and controller, which are not mentioned in the product specification.
 
-Reason:
-- Product airflow capacity below RFQ requirement
-- Missing ISO 9001 certification
-- Noise level exceeds engineering tolerance
+Based on the comparison, there are two significant mismatches:
 
-Recommendation:
-Use AC-200-XP alternative model.
+* The product specification does not mention the pressure requirement, which is a critical parameter for the compressor.
+* The product specification does not provide detailed information about the cooling, drive, and controller, which are specified in the RFQ.
+
+Considering these mismatches, the final verdict is: **FAIL**
+
+The reasoning for this decision is that the product specification does not meet the critical requirements specified in the RFQ, particularly the pressure requirement. While the product specification meets some of the requirements, such as capacity and noise level, the lack of information about pressure and other key parameters makes it unsuitable for the intended application.
+
+📁 Database connection closed.
+
 ```
 
 ---
