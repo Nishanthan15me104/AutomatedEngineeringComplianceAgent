@@ -62,23 +62,31 @@ def retrieve_rfq_requirements(state: AgentState):
     return {"rfq_constraints": constraints}
 
 def retrieve_product_catalog(state: AgentState):
-    """Fetches specs for the target product ID."""
+    """Fetches specs for the target product ID using a direct metadata match."""
     print(f"--- STEP: Fetching Specs for {state['product_id']} ---")
     
-    # Encode text to vector
-    query_vector = embed_model.encode(state['product_id']).tolist()
-    
-    # Search with a Hard Filter: ONLY look at CATALOG sources
+    # We don't even need a vector here. We are asking Qdrant to look at its
+    # internal 'Excel-like' table (Payload) for the exact Product ID.
     results = client.query_points(
         collection_name=COLLECTION_NAME,
-        query=query_vector,
+        # We search with an empty vector or dummy search because the FILTER does the work
+        query=[0.0] * 384, 
         query_filter=Filter(
-            must=[FieldCondition(key="source", match=MatchValue(value="CATALOG"))]
+            must=[
+                FieldCondition(key="product_id", match=MatchValue(value=state['product_id'])),
+                FieldCondition(key="source", match=MatchValue(value="CATALOG"))
+            ]
         ),
-        limit=2
+        limit=1
     ).points
     
     specs = [res.payload['content'] for res in results]
+    
+    if not specs:
+        print(f"❌ ERROR: Product ID '{state['product_id']}' not found in Qdrant!")
+    else:
+        print(f"✅ Found Specs: {specs[0][:60]}...")
+        
     return {"product_specs": specs}
 
 def check_compliance(state: AgentState):
