@@ -15,7 +15,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # -----------------------------
 BASE = Path(__file__).resolve().parent.parent
 JSON_PATH = BASE / "data" / "extracted" / "metadata.json"
-CSV_PATH = BASE / "data" / "input" / "products.csv"
+CSV_PATH = BASE / "data" / "input" / "product.csv"
 QDRANT_PATH = BASE / "data" / "qdrant_storage"
 
 # -----------------------------
@@ -41,7 +41,8 @@ def build_vector_db():
 
         points = []
         idx = 0
-
+        print(f"Looking for JSON at: {JSON_PATH} | Found: {JSON_PATH.exists()}")
+        print(f"Looking for CSV at: {CSV_PATH} | Found: {CSV_PATH.exists()}")
         # --- A. Process RFQ JSON Chunks ---
         if JSON_PATH.exists():
             with open(JSON_PATH, "r", encoding="utf-8") as f:

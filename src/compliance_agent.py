@@ -65,26 +65,28 @@ def retrieve_product_catalog(state: AgentState):
     """Fetches specs for the target product ID using a direct metadata match."""
     print(f"--- STEP: Fetching Specs for {state['product_id']} ---")
     
-    # We don't even need a vector here. We are asking Qdrant to look at its
-    # internal 'Excel-like' table (Payload) for the exact Product ID.
-    results = client.query_points(
+    # Use client.scroll() for pure metadata lookup without vectors
+    # This bypasses the Cosine distance mathematical error
+    result = client.scroll(
         collection_name=COLLECTION_NAME,
-        # We search with an empty vector or dummy search because the FILTER does the work
-        query=[0.0] * 384, 
-        query_filter=Filter(
+        scroll_filter=Filter(
             must=[
                 FieldCondition(key="product_id", match=MatchValue(value=state['product_id'])),
                 FieldCondition(key="source", match=MatchValue(value="CATALOG"))
             ]
         ),
         limit=1
-    ).points
+    )
     
-    specs = [res.payload['content'] for res in results]
+    # result[0] contains the actual list of found records
+    records = result[0] 
     
-    if not specs:
+    if not records:
         print(f"❌ ERROR: Product ID '{state['product_id']}' not found in Qdrant!")
+        specs = []
     else:
+        # Extract the content from the payload
+        specs = [records[0].payload['content']]
         print(f"✅ Found Specs: {specs[0][:60]}...")
         
     return {"product_specs": specs}
